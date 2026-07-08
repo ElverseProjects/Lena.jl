@@ -43,6 +43,7 @@ Current provider support:
 - inline Python with `@python """..."""`;
 - inline C with `@c """..."""`;
 - inline Rust with `@rust """..."""`;
+- Rust project loading with `Lena.Rust.load(path)`.
 - C project loading with `Lena.C.load(path)`.
 
 The core abstraction is a **provider**:
