@@ -1,0 +1,6 @@
+name = "mylib"
+language = "c"
+headers = ["include/mylib.h"]
+sources = ["src/mylib.c"]
+include_dirs = ["include"]
+exports = ["add_i32", "mul_f64", "clamp_i32"]
