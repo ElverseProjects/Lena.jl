@@ -1,6 +1,6 @@
 module Lena
 
-export @python, @c, @rust, AbstractProvider
+export @python, @c, @rust, AbstractProvider  
 
 """
     AbstractProvider
@@ -33,7 +33,7 @@ macro python(code)
     if !(code isa String)
         throw(ArgumentError("@python expects a string literal, preferably a triple-quoted string"))
     end
-    return :(Lena.PythonProvider($code))
+    return :(Lena.Python.inline($code))
 end
 
 """

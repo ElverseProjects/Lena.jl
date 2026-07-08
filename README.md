@@ -2,6 +2,8 @@
 
 **A Julia DSL for provider-based multilingual integration.**
 
+![Lena logo](.github/images/lena_jl_logo.png)
+
 Lena.jl is an experimental Julia package for embedding, building, importing, and calling foreign-language code from Julia through a unified provider interface.
 
 The goal is simple: write small pieces of Python, C, or Rust close to the Julia code that uses them, and call exported functions as ordinary Julia properties.

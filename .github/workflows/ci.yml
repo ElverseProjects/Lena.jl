@@ -7,13 +7,43 @@ on:
     branches: [main]
 
 jobs:
-  test:
+  load:
+    name: Load package without external tools
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - uses: julia-actions/setup-julia@v2
         with:
           version: '1.10'
+
       - uses: julia-actions/cache@v2
+
+      - name: Instantiate
+        run: julia --project=. -e 'using Pkg; Pkg.instantiate()'
+
+      - name: Load Lena with hidden external tools
+        run: julia --project=. --startup-file=no -e 'ENV["PATH"]=""; ENV["JULIA_PYTHONCALL_EXE"]="//definitely//missing//python"; using Lena; println("using Lena OK")'
+
+  test:
+    name: Test Julia ${{ matrix.version }} on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        version: ['1.10', '1.11']
+        os: [ubuntu-latest, windows-latest]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: ${{ matrix.version }}
+
+      - uses: julia-actions/cache@v2
+
       - uses: julia-actions/julia-buildpkg@v1
+
       - uses: julia-actions/julia-runtest@v1

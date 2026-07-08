@@ -1,46 +1,63 @@
-import PythonCall
+module Python
 
-"""
-    PythonProvider(code::AbstractString; name="__lena_inline__")
+import ..AbstractProvider
+import Base: getproperty, propertynames
 
-Provider object returned by `@python`.
-"""
 struct PythonProvider <: AbstractProvider
     namespace::Any
     code::String
 end
 
-function PythonProvider(code::AbstractString; name::AbstractString="__lena_inline__")
-    types = PythonCall.pyimport("types")
-    builtins = PythonCall.pyimport("builtins")
-    mod = types.ModuleType(name)
-    builtins.exec(String(code), mod.__dict__)
-    return PythonProvider(mod, String(code))
+"""
+    _pythoncall()
+
+Load PythonCall lazily.
+
+Important: do not put `using PythonCall` at the top of this file.
+Otherwise `using Lena` will require Python immediately.
+"""
+function _pythoncall()
+    if !isdefined(@__MODULE__, :PythonCall)
+        @eval import PythonCall
+    end
+
+    return getfield(@__MODULE__, :PythonCall)
+end
+
+"""
+    inline(code::AbstractString)
+
+Execute inline Python code and return a provider object.
+
+PythonCall is loaded only here, not when `using Lena` runs.
+"""
+function inline(code::AbstractString)
+    PC = _pythoncall()
+
+    builtins = PC.pyimport("builtins")
+    namespace = builtins.dict()
+
+    builtins.exec(String(code), namespace)
+
+    return PythonProvider(namespace, String(code))
 end
 
 function Base.getproperty(provider::PythonProvider, name::Symbol)
     if name === :namespace || name === :code
         return getfield(provider, name)
     end
-    return getproperty(getfield(provider, :namespace), name)
+
+    namespace = getfield(provider, :namespace)
+    return namespace[String(name)]
 end
 
 function Base.propertynames(provider::PythonProvider; private::Bool=false)
-    names = try
-        builtins = PythonCall.pyimport("builtins")
-        Symbol.(PythonCall.pyconvert(Vector{String}, PythonCall.pylist(builtins.dir(getfield(provider, :namespace)))))
-    catch
-        Symbol[]
+    if private
+        return (:namespace, :code)
     end
-    public_names = filter(n -> !startswith(String(n), "__"), names)
-    base = (:namespace, :code)
-    return private ? (base..., public_names...) : Tuple(public_names)
+
+    # Keep it simple for now. Python namespace introspection can be improved later.
+    return (:namespace, :code)
 end
 
-function Base.show(io::IO, provider::PythonProvider)
-    print(io, "Lena.PythonProvider(")
-    names = propertynames(provider)
-    print(io, length(names), " public name")
-    length(names) == 1 || print(io, "s")
-    print(io, ")")
 end

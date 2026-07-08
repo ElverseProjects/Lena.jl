@@ -64,3 +64,12 @@ fn mul_f64(a: f64, b: f64) -> f64 {
         @test rs.mul_f64(2.0, 4.0) == 8.0
     end
 end
+
+@testset "Rust import smoke test" begin
+    rs = Lena.Rust.load(joinpath(@__DIR__, "..", "examples", "native_rust_mylib"))
+
+    @test rs.add_i32(Int32(10), Int32(20)) == Int32(30)
+    @test rs.mul_f64(2.5, 4.0) == 10.0
+    @test rs.clamp_i32(Int32(300), Int32(0), Int32(255)) == Int32(255)
+end
+

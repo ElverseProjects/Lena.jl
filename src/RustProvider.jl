@@ -2,10 +2,11 @@ module Rust
 
 using Libdl
 using SHA
+using TOML
 import ..AbstractProvider
 import ..C
 
-export RustProvider, RustSignature, inline, parse_signatures
+export RustProvider, RustSignature, inline, load, import_project, parse_signatures
 
 """
     RustSignature
@@ -251,6 +252,105 @@ function _rust_libpath(build_dir::AbstractString, crate_name::AbstractString)
     throw(ErrorException("Lena.Rust built the crate, but could not find dynamic library '$filename' in $release_dir. Found: $(join(candidates, ", "))"))
 end
 
+
+function _string_list(value, field::AbstractString)
+    value === nothing && return String[]
+    if value isa Vector
+        return String[String(x) for x in value]
+    elseif value isa AbstractString
+        return String[String(value)]
+    else
+        throw(ArgumentError("Lena.Rust.load expected `$field` to be a string or a list of strings"))
+    end
+end
+
+function _read_project_config(project_dir::AbstractString)
+    config_path = joinpath(project_dir, "Lena.toml")
+    isfile(config_path) || throw(ArgumentError("Lena.Rust.load expected a Lena.toml file in $project_dir"))
+
+    config = TOML.parsefile(config_path)
+    language = lowercase(String(get(config, "language", "rust")))
+    language == "rust" || throw(ArgumentError("Lena.Rust.load expected language = \"rust\" in Lena.toml, got '$language'"))
+    return config
+end
+
+function _read_project_sources(project_dir::AbstractString, sources::Vector{String})
+    isempty(sources) && throw(ArgumentError("Lena.Rust.load expected at least one source file in Lena.toml, for example sources = [\"src/lib.rs\"]"))
+
+    parts = String[]
+    for rel in sources
+        path = joinpath(project_dir, rel)
+        isfile(path) || throw(ArgumentError("Lena.Rust.load source file not found: $path"))
+        push!(parts, "\n// ---- Lena source: $rel ----\n")
+        push!(parts, read(path, String))
+        push!(parts, "\n")
+    end
+
+    return join(parts, "\n")
+end
+
+function _filter_signatures(signatures::Vector{RustSignature}, exports::Vector{String})
+    isempty(exports) && return signatures
+
+    wanted = Set(Symbol(x) for x in exports)
+    filtered = [sig for sig in signatures if sig.name in wanted]
+    found = Set(sig.name for sig in filtered)
+    missing = setdiff(wanted, found)
+    isempty(missing) || throw(ArgumentError("Lena.Rust.load could not find exported Rust functions listed in Lena.toml: $(join(string.(collect(missing)), ", "))"))
+    return filtered
+end
+
+"""
+    load(path::AbstractString; cargo_flags=String[])
+
+Load a Lena-Rust project from a directory.
+
+The directory must contain a `Lena.toml` file. MVP example:
+
+```toml
+name = "native_rust_mylib"
+language = "rust"
+sources = ["src/lib.rs"]
+exports = ["add_i32", "mul_f64"]
+```
+
+Source files use Lena's `@export` marker before functions that should be exposed
+to Julia through the C ABI.
+"""
+function load(path::AbstractString; cargo_flags::Vector{String}=String[])
+    project_dir = abspath(path)
+    isdir(project_dir) || throw(ArgumentError("Lena.Rust.load expected a directory path, got $path"))
+
+    config = _read_project_config(project_dir)
+    name = String(get(config, "name", basename(project_dir)))
+    sources = _string_list(get(config, "sources", ["src/lib.rs"]), "sources")
+    exports = _string_list(get(config, "exports", String[]), "exports")
+    config_flags = _string_list(get(config, "cargo_flags", String[]), "cargo_flags")
+    all_flags = vcat(config_flags, cargo_flags)
+
+    code = _read_project_sources(project_dir, sources)
+    signatures = _filter_signatures(parse_signatures(code), exports)
+    isempty(signatures) && throw(ArgumentError("Lena.Rust.load found no exported Rust functions. Mark exported functions with `@export`."))
+
+    rust_code = _generate_ffi_code(code)
+    hash = _digest(project_dir, rust_code, join(all_flags, "\0"), VERSION)
+    crate_name = _crate_name(name, hash)
+
+    build_dir = joinpath(C.cache_root(), "rust_import", hash)
+    mkpath(build_dir)
+
+    _write_cargo_project(build_dir, crate_name, rust_code)
+    _cargo_build(build_dir; flags=all_flags)
+
+    libpath = _rust_libpath(build_dir, crate_name)
+    inner = C._provider_from_library(libpath, _to_c_signatures(signatures), build_dir)
+    sigdict = Dict(sig.name => sig for sig in signatures)
+
+    return RustProvider(inner, sigdict, build_dir, crate_name)
+end
+
+const import_project = load
+
 """
     inline(code::AbstractString; name="inline", cargo_flags=String[])
 
@@ -259,10 +359,8 @@ Compile inline Lena-Rust code into a Rust `cdylib` and return a `RustProvider`.
 Export functions with Lena's `@export` marker:
 
 ```julia
-```julia
 code = "@export\nfn add_i32(a: i32, b: i32) -> i32 {\n    a + b\n}\n"
 rs = Lena.Rust.inline(code)
-
 
 rs.add_i32(Int32(1), Int32(2))
 ```

@@ -1,6 +1,6 @@
 using Lena
 
-mylib = Lena.C.load(joinpath(@__DIR__, "native_mylib"))
+mylib = Lena.C.load(joinpath(@__DIR__, "native_c_mylib"))
 
 println(mylib.add_i32(Int32(1), Int32(2)))
 println(mylib.mul_f64(2.0, 4.0))

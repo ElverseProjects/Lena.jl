@@ -1,0 +1,4 @@
+name = "native_rust_mylib"
+language = "rust"
+sources = ["src/lib.rs"]
+exports = ["add_i32", "mul_f64", "clamp_i32"]
