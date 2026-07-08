@@ -1,8 +1,6 @@
 # Lena.jl
 
-**A Julia DSL for provider-based multilingual integration.**
-
-![Lena logo](.github/images/lena_jl_logo.png)
+![Lena logo](.github/images/lena_board.png)
 
 Lena.jl is an experimental Julia package for embedding, building, importing, and calling foreign-language code from Julia through a unified provider interface.
 
